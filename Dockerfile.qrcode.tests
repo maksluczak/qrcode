@@ -1,0 +1,5 @@
+FROM qrcodebld:latest
+
+WORKDIR /app
+
+RUN dotnet test -c Release
