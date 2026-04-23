@@ -8,8 +8,9 @@ pipeline {
             }
         }
         
-        stage('Build') {
+        stage('Build Image') {
             steps {
+                // Budujemy obraz bazowy, który ma SDK i narzędzia
                 sh 'docker build -t qrcodebld -f Dockerfile.qrcode.bld .'
             }
         }
@@ -24,16 +25,13 @@ pipeline {
         stage('Verify') {
             steps {
                 script {
+                    // Montujemy workspace, budujemy bibliotekę i uruchamiamy projekt testowy
+                    // To wygeneruje qrcode.bmp bezpośrednio w Twoim workspace na Jenkinsie
                     sh '''
                     docker run --rm -v $(pwd):/app -w /app qrcodebld bash -c "
-                    # 1. Tworzymy nowy projekt
                     dotnet new console -n TestProj --force
-                    
-                    # 2. Zamiast szukać DLL, dodajemy referencję do projektu źródłowego
-                    # To zadziała, bo cały kod źródłowy jest zamontowany w /app
                     dotnet add TestProj/TestProj.csproj reference src/Genocs.QRCodeLibrary/Genocs.QRCodeLibrary.csproj
                     
-                    # 3. Tworzymy kod testowy
                     cat <<EOF > TestProj/Program.cs
 using System;
 using System.IO;
@@ -51,7 +49,6 @@ try {
     Environment.Exit(1);
 }
 EOF
-                    # 4. Uruchamiamy - to zbuduje bibliotekę i test w jednym kroku
                     dotnet run --project TestProj/TestProj.csproj
                     "
                     '''
@@ -61,13 +58,21 @@ EOF
 
         stage('NuGet Packaging') {
             steps {
-                sh 'docker run --rm -v $(pwd):/app -w /app qrcodebld dotnet pack src/Genocs.QRCodeLibrary/Genocs.QRCodeLibrary.csproj -c Release -o /app/final_artifacts'
+                // KLUCZOWA ZMIANA: Najpierw robimy build, potem pack w tym samym poleceniu.
+                // Dzięki temu binaria zostaną stworzone wewnątrz zamontowanego wolumenu /app.
+                sh '''
+                docker run --rm -v $(pwd):/app -w /app qrcodebld bash -c "
+                dotnet build src/Genocs.QRCodeLibrary/Genocs.QRCodeLibrary.csproj -c Release
+                dotnet pack src/Genocs.QRCodeLibrary/Genocs.QRCodeLibrary.csproj -c Release -o /app/final_artifacts
+                "
+                '''
             }
         }
     }
 
     post {
         success {
+            // Jenkins znajdzie te pliki, bo zostały zapisane w zamontowanym wolumenie $(pwd)
             archiveArtifacts artifacts: 'final_artifacts/*.nupkg, TestProj/qrcode.bmp', fingerprint: true
             echo "Task completed successfully. Artifacts saved."
         }
