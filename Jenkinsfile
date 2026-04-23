@@ -10,7 +10,6 @@ pipeline {
         
         stage('Build Image') {
             steps {
-                // Budujemy obraz bazowy, który ma SDK i narzędzia
                 sh 'docker build -t qrcodebld -f Dockerfile.qrcode.bld .'
             }
         }
@@ -25,8 +24,6 @@ pipeline {
         stage('Verify') {
             steps {
                 script {
-                    // Montujemy workspace, budujemy bibliotekę i uruchamiamy projekt testowy
-                    // To wygeneruje qrcode.bmp bezpośrednio w Twoim workspace na Jenkinsie
                     sh '''
                     docker run --rm -v $(pwd):/app -w /app qrcodebld bash -c "
                     dotnet new console -n TestProj --force
@@ -58,8 +55,6 @@ EOF
 
         stage('NuGet Packaging') {
             steps {
-                // KLUCZOWA ZMIANA: Najpierw robimy build, potem pack w tym samym poleceniu.
-                // Dzięki temu binaria zostaną stworzone wewnątrz zamontowanego wolumenu /app.
                 sh '''
                 docker run --rm -v $(pwd):/app -w /app qrcodebld bash -c "
                 dotnet build src/Genocs.QRCodeLibrary/Genocs.QRCodeLibrary.csproj -c Release
@@ -72,7 +67,6 @@ EOF
 
     post {
         success {
-            // Jenkins znajdzie te pliki, bo zostały zapisane w zamontowanym wolumenie $(pwd)
             archiveArtifacts artifacts: 'final_artifacts/*.nupkg, TestProj/qrcode.bmp', fingerprint: true
             echo "Task completed successfully. Artifacts saved."
         }
