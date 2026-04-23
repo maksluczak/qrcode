@@ -26,24 +26,14 @@ pipeline {
                 script {
                     sh '''
                     docker run --rm -v $(pwd):/app -w /app qrcodebld bash -c "
+                    # 1. Tworzymy nowy projekt
                     dotnet new console -n TestProj --force
                     
-                    cat <<EOF > TestProj/TestProj.csproj
-<Project Sdk=\\"Microsoft.NET.Sdk\\">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
-  <ItemGroup>
-    <Reference Include=\\"Genocs.QRCodeLibrary\\">
-      <HintPath>../src/Genocs.QRCodeLibrary/bin/Release/net8.0/Genocs.QRCodeLibrary.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-</Project>
-EOF
-
+                    # 2. Zamiast szukać DLL, dodajemy referencję do projektu źródłowego
+                    # To zadziała, bo cały kod źródłowy jest zamontowany w /app
+                    dotnet add TestProj/TestProj.csproj reference src/Genocs.QRCodeLibrary/Genocs.QRCodeLibrary.csproj
+                    
+                    # 3. Tworzymy kod testowy
                     cat <<EOF > TestProj/Program.cs
 using System;
 using System.IO;
@@ -51,7 +41,7 @@ using Genocs.QRCodeGenerator.Encoder;
 
 try {
     var generator = new QRCodeGenerator();
-    var data = generator.CreateQrCode(\\"https://example.com\\", QRCodeGenerator.ECCLevel.Q);
+    var data = generator.CreateQrCode(\\"https://jenkins.io\\", QRCodeGenerator.ECCLevel.Q);
     var qr = new BitmapByteQRCode(data);
     byte[] bmpBytes = qr.GetGraphic(5);
     File.WriteAllBytes(\\"qrcode.bmp\\", bmpBytes);
@@ -61,6 +51,7 @@ try {
     Environment.Exit(1);
 }
 EOF
+                    # 4. Uruchamiamy - to zbuduje bibliotekę i test w jednym kroku
                     dotnet run --project TestProj/TestProj.csproj
                     "
                     '''
