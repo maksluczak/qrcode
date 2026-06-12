@@ -1,0 +1,27 @@
+name: Build on ino_dev
+
+on:
+  push:
+    branches: [ino_dev]
+  pull_request: 
+    branches: [ino_dev]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+    - name: Display dotnet version
+      run: dotnet --version
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore
+    - name: Run tests
+      run: dotnet test --no-build
