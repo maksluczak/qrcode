@@ -13,15 +13,52 @@ jobs:
   steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    - name: Setup dotnet
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
-    - name: Display dotnet version
-      run: dotnet --version
-    - name: Restore dependencies
-      run: dotnet restore
+    
     - name: Build
-      run: dotnet build --no-restore
-    - name: Run tests
-      run: dotnet test --no-build
+      run: docker build -t qrcodebld -f Dockerfile.qrcode.bld .
+
+    - name: Deploy
+      run: |
+          docker run --rm -v $(pwd):/app -w /app qrcodebld bash -c "
+            dotnet new console -n TestProj --force
+            dotnet add TestProj/TestProj.csproj reference src/Genocs.QRCodeLibrary/Genocs.QRCodeLibrary.csproj
+
+            cat <<'EOF' > TestProj/Program.cs
+          using System;
+          using System.IO;
+          using Genocs.QRCodeGenerator.Encoder;
+
+          try {
+              var generator = new QRCodeGenerator();
+              var data = generator.CreateQrCode(\"https://jenkins.io\", QRCodeGenerator.ECCLevel.Q);
+              var qr = new BitmapByteQRCode(data);
+              byte[] bmpBytes = qr.GetGraphic(5);
+              File.WriteAllBytes(\"qrcode.bmp\", bmpBytes);
+              Console.WriteLine(\"Success! Test Passed.\");
+          } catch (Exception ex) {
+              Console.WriteLine(\"Test Failed: \" + ex.Message);
+              Environment.Exit(1);
+          }
+          EOF
+
+            dotnet run --project TestProj/TestProj.csproj
+          "
+    
+    - name: Publish
+      run: |
+          docker run --rm -v $(pwd):/app -w /app qrcodebld bash -c "
+            dotnet build src/Genocs.QRCodeLibrary/Genocs.QRCodeLibrary.csproj -c Release
+            dotnet pack src/Genocs.QRCodeLibrary/Genocs.QRCodeLibrary.csproj -c Release -o /app/final_artifacts
+          "
+    
+    - name: Upload nuget package
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-package
+        path: final_artifacts/*.nupkg
+
+    - name: Upload QR code
+      uses: actions/upload-artifact@v4
+      with:
+        name: qrcode-bmp
+        path: TestProj/qrcode.bmp
